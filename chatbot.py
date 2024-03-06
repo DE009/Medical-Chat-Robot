@@ -47,13 +47,16 @@ class Tools:
 
     def search_manual(self, medication_name: str) -> list[dict[str:str]]:
         result = es.base_search("medication_name", key_word=medication_name)
-        return [
-            {
-                "manual": hit["_source"]["manual"],
-                "medication_name": hit["_source"]["medication_name"],
-            }
-            for hit in result["hits"]["hits"]
-        ]
+        if result['hits']['total']['value']:
+            return [
+                {
+                    "manual": hit["_source"]["manual"],
+                    "medication_name": hit["_source"]["medication_name"],
+                }
+                for hit in result["hits"]["hits"]
+            ]
+        else:
+            return False
 
     @tool
     def ask_human(question: str):
@@ -150,15 +153,19 @@ class ChatBot:
                 # 若无cache。
                 # 1. 搜索药物对应的说明书；2. 按照chunk_size，切分为文本块；3.通过embedding模型，构建vectorstore对象。4. 返回retriever对象。
                 print(medication_name)
-                manual = self.tools.search_manual(medication_name)[0]["manual"]
-                text_splitter = RecursiveCharacterTextSplitter(
+                manual = self.tools.search_manual(medication_name)
+                print(manual)
+                if manual:  #是否有搜索结果，有，做retriever，无，则返回string信息告诉LLM。
+                    text_splitter = RecursiveCharacterTextSplitter(
                     chunk_size=512, chunk_overlap=200
-                )
-                splits = text_splitter.split_text(manual)
-                vectorstore = FAISS.from_texts(splits, embedding=embeddings)
-                # 将当前药物加入cache
-                retriever_cache[medication_name] = vectorstore.as_retriever()
-                return retriever_cache[medication_name]
+                    )
+                    splits = text_splitter.split_text(manual[0]['manual'])  # 取检索到的第一个说明书，构建retriever
+                    vectorstore = FAISS.from_texts(splits, embedding=embeddings)
+                    # 将当前药物加入cache
+                    retriever_cache[medication_name] = vectorstore.as_retriever()
+                    return retriever_cache[medication_name]
+                else:   # 若没搜索到结果，则告知LLM没有结果，以及可能的问题所在。
+                    return "抱歉，没有相关的药物。可能是用户问题不清晰，或者当前药物库中没有该药物，抱歉。"      
 
         return (
             #     {"input":itemgetter("input")}|
@@ -260,6 +267,9 @@ chat = ChatBot(debug=True)
 chat.full_chain.get_graph().print_ascii()
 while True:
     input_str=input(":")
-    res=chat.chat(input_str)
-    print(res)
+    if input_str=="q":
+        break
+    else:
+        res=chat.chat(input_str)
+        print(res)
 
