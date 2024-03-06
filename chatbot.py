@@ -35,8 +35,8 @@ class Tools:
     # 当然，这样的话，也就相当于一个类方法了。和对象没有关系。不过无所谓，这里tool本来就是为了逻辑清晰而用的。
     @tool
     def search_indication(indication: str) -> list[dict[str:str]]:
-        """search with indication of patient and return top 10 relative medicine."""
-        result = es.base_search("indication", key_word=indication)
+        """search with indication of patient and return top 3 relative medicine."""
+        result = es.base_search("indication", key_word=indication, size=3)
         return [
             {
                 "indication": hit["_source"]["indication"],
