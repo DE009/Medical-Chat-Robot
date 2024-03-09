@@ -47,7 +47,7 @@ class Tools:
 
     def search_manual(self, medication_name: str) -> list[dict[str:str]]:
         result = es.base_search("medication_name", key_word=medication_name)
-        if result['hits']['total']['value']:
+        if result["hits"]["total"]["value"]:
             return [
                 {
                     "manual": hit["_source"]["manual"],
@@ -79,6 +79,8 @@ class ChatBot:
 
         self.tools = Tools()
 
+        self.end_chat = False  # 是否结束当前对话，清空历史的标志位。
+
         # 构建三个agent
         self.diagnose_agent = self._agent_init(
             prompt=PromptTemplate.from_template(
@@ -99,11 +101,14 @@ class ChatBot:
             tools=[DuckDuckGoSearchResults()],
         )
         # 构建chain
+        self.bye_chain = self._standard_str_chain_init("bye_prompt")
         self.rag_chain = self._rag_chain_init()
 
-        self.router_chain = self._router_chain_init()
+        self.router_chain = self._standard_str_chain_init("router_prompt")
 
-        self.contextualize_q_chain = self._contextualize_q_chain_init()
+        self.contextualize_q_chain = self._standard_str_chain_init(
+            "contextualize_q_system_prompt"
+        )
 
         self.full_chain = self._init_full_chain()
 
@@ -121,6 +126,10 @@ class ChatBot:
         # Create an agent executor by passing in the agent and tools
         agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
         return agent_executor
+
+    def _standard_str_chain_init(self, prompt_index):
+        prompt = PromptTemplate.from_template(self.prompts[prompt_index])
+        return prompt | self.llm | StrOutputParser()
 
     def _contextualize_q_chain_init(self):
         # 构建上下文联系chain
@@ -155,17 +164,21 @@ class ChatBot:
                 print(medication_name)
                 manual = self.tools.search_manual(medication_name)
                 print(manual)
-                if manual:  #是否有搜索结果，有，做retriever，无，则返回string信息告诉LLM。
+                if (
+                    manual
+                ):  # 是否有搜索结果，有，做retriever，无，则返回string信息告诉LLM。
                     text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=512, chunk_overlap=200
+                        chunk_size=512, chunk_overlap=200
                     )
-                    splits = text_splitter.split_text(manual[0]['manual'])  # 取检索到的第一个说明书，构建retriever
+                    splits = text_splitter.split_text(
+                        manual[0]["manual"]
+                    )  # 取检索到的第一个说明书，构建retriever
                     vectorstore = FAISS.from_texts(splits, embedding=embeddings)
                     # 将当前药物加入cache
                     retriever_cache[medication_name] = vectorstore.as_retriever()
                     return retriever_cache[medication_name]
-                else:   # 若没搜索到结果，则告知LLM没有结果，以及可能的问题所在。
-                    return "抱歉，没有相关的药物。可能是用户问题不清晰，或者当前药物库中没有该药物，抱歉。"      
+                else:  # 若没搜索到结果，则告知LLM没有结果，以及可能的问题所在。
+                    return "抱歉，没有相关的药物。可能是用户问题不清晰，或者当前药物库中没有该药物，抱歉。"
 
         return (
             #     {"input":itemgetter("input")}|
@@ -193,15 +206,30 @@ class ChatBot:
 
         def router(info):
             if "药物推荐" in info["topic"]:
-                return self.medication_agent
+                return (
+                    RunnablePassthrough.assign(input=contextualized_question)
+                    | self.medication_agent
+                )
             elif "诊断" in info["topic"]:
-                return self.diagnose_agent
+                return (
+                    RunnablePassthrough.assign(input=contextualized_question)
+                    | self.diagnose_agent
+                )
             elif "药物详细内容" in info["topic"]:
-                return self.rag_chain
+                # return self.rag_chain
+                return (
+                    RunnablePassthrough.assign(input=contextualized_question)
+                    | self.rag_chain
+                )
             elif "其他内容" in info["topic"]:
-                return self.other_agent
+                # return self.other_agent
+                return (
+                    RunnablePassthrough.assign(input=contextualized_question)
+                    | self.other_agent
+                )
             elif "结束对话" in info["topic"]:
-                return False
+                self.end_chat = True
+                return self.bye_chain
 
         return (
             # router chain，分流，结果进入topic。通过
@@ -212,7 +240,6 @@ class ChatBot:
                 chat_history=RunnableLambda(self.memory.load_memory_variables)
                 | itemgetter("chat_history")
             )
-            | RunnablePassthrough.assign(input=contextualized_question)
             | RunnableLambda(router)
         )
 
@@ -246,30 +273,28 @@ class ChatBot:
     #             break
 
     def chat(self, input_str):
-        '''根据用户问题，经过fullchaiin，返回一个答案，并保存memory'''
+        """根据用户问题，经过fullchaiin，返回一个答案，并保存memory"""
         input_dict = {"input": input_str}
         response = self.full_chain.invoke(input_dict)
-        if response == False:
+        output = response if isinstance(response, str) else response["output"]
+        if self.end_chat:
             self.memory.clear()
-            return "再见，期待下次再见。"
-        else:
-            # 若为正常内容，保存本次历史。返回回答。
-            # 由于agent和chain的输出格式不同，所以，这里做了判断。agent输出为dict。chain直接输出str。因为outparse不同，一个是reactagent，一个stroutputparse
-            output = response if isinstance(response, str) else response["output"]
+            self.end_chat = False
+        else:  # 否则保存历史对话。
             self.memory.save_context(
                 input_dict,
                 {"output": output},
             )
-            return output
+        # 返回回答结果。
+        return output
 
 
 chat = ChatBot(debug=True)
 chat.full_chain.get_graph().print_ascii()
 while True:
-    input_str=input(":")
-    if input_str=="q":
+    input_str = input(":")
+    if input_str == "q":
         break
     else:
-        res=chat.chat(input_str)
+        res = chat.chat(input_str)
         print(res)
-
