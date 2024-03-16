@@ -42,6 +42,12 @@ class NaoControl():
         # 配置LED
         self.led =self.ses.service("ALLeds")
 
+        # 配置自主生活，初始化为活动状态
+        self.auto_life= self.ses.service("ALAutonomousLife")
+        self.auto_life.setState("solitary")
+
+        self.post= self.ses.service("ALRobotPosture")
+
 
         #当前正在对话的标志位
         self.chating=False
@@ -62,22 +68,34 @@ class NaoControl():
                 data=f.read()
             return data
         audio_file="/home/nao/medic_chatbot/record.wav"
+        # 进入录音，停止自主生活，避免头部转动干扰音量判断
+        self.auto_life.setState("safeguard")
+        self.post.goToPosture("Stand",0.5)
+        time.sleep(1)
+        while True:
+            print(self.audio_service.getFrontMicEnergy())
+            if self.audio_service.getFrontMicEnergy() > 600:
+                break
+        print("开始录音")
         self.audio_recorder.stopMicrophonesRecording()
         self.audio_recorder.startMicrophonesRecording(audio_file,"wav",16000,(1,0,0,0))
         # 若声音持续小于2000超过1.5秒？就停止录音
         silence_time=0
         while True:
-            if self.audio_service.getFrontMicEnergy() < 2000:
-                silence_time += 1  # 增加静音时间，单位为秒
+            if self.audio_service.getFrontMicEnergy() < 1200:
+                print("静音了",silence_time)
+                silence_time += 0.1  # 增加静音时间，单位为秒
                 if silence_time >= 3:  # 如果静音时间超过1.5秒，则停止录音
                     break
-                # time.sleep(0.1)
-                self.led.rotateEyes(0xFF,0.5,0.5)
+                time.sleep(0.1)
             else:
+                print("重置silence")
                 # 若期间有高于2000的，则从零继续开始计数。
                 silence_time =0
         self.audio_recorder.stopMicrophonesRecording()
-            
+        print("录音结束")
+        # 录音结束，恢复自主生活
+        self.auto_life.setState("solitary")
 
         # 读取录音文件的内容，返回字节对象值。
         data=read_file(audio_file)
@@ -92,7 +110,7 @@ class NaoControl():
         pass
     def chat(self):
         while True:
-            # 进入chat获取标值
+            # 进入chat获取标志
             self.chating=True
             audio=self.record()
             # 发送音频，等待用户回答的str。

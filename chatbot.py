@@ -33,8 +33,8 @@ es = Elastic(els_url, els_key)
 
 PC_IP = "192.168.43.60"
 PC_PORT = 5555
-# comm = PCCommunication()
-# comm.start_listening(PC_IP, PC_PORT)
+comm = PCCommunication()
+comm.start_listening(PC_IP, PC_PORT)
 
 
 class Tools:
@@ -68,20 +68,20 @@ class Tools:
             return False
 
     # 在console和人文字对话的函数
-    @tool
-    def ask_human(question: str):
-        """ask patients for the information they need to help you diagnose"""
-        answer = input(question)
-        return answer
-
-    # 和Nao对话的ask human函数
     # @tool
     # def ask_human(question: str):
     #     """ask patients for the information they need to help you diagnose"""
-    #     # 发送控制信号
-    #     comm.send_ctrl_sign(question, False, "")
-    #     answer = comm.recv_audio_to_text()
+    #     answer = input(question)
     #     return answer
+
+    # 和Nao对话的ask human函数
+    @tool
+    def ask_human(question: str):
+        """ask patients for the information they need to help you diagnose"""
+        # 发送控制信号
+        comm.send_ctrl_sign(question, False, "")
+        answer = comm.recv_audio_to_text()
+        return answer
 
 
 class ChatBot:
@@ -319,12 +319,12 @@ class ChatBot:
             comm.send_ctrl_sign(output,end_chat=self.end_chat,action="")
 
 
-chat = ChatBot(debug=True)
-chat.full_chain.get_graph().print_ascii()
-while True:
-    input_str = input(":")
-    if input_str == "q":
-        break
-    else:
-        res = chat.chat(input_str)
-        print(res)
+# chat = ChatBot(debug=True)
+# chat.full_chain.get_graph().print_ascii()
+# while True:
+#     input_str = input(":")
+#     if input_str == "q":
+#         break
+#     else:
+#         res = chat.chat(input_str)
+#         print(res)
