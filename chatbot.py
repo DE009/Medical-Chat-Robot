@@ -2,6 +2,8 @@ from elastic_search import Elastic
 import json
 import os
 
+from pc_comm import PCCommunication
+
 import langchain
 from langchain_core.prompts import PromptTemplate
 from langchain.tools import tool
@@ -25,7 +27,14 @@ els_url = "https://118.178.196.244:9200"
 els_key = "Z1FnVVdZMEJnLUNkTWFrdXdfdk46YVBjdEtyVHhTek90VTloSUV3LUNIZw=="
 os.environ["DASHSCOPE_API_KEY"] = "sk-a34e3a056413489f8e3300bef0a1a6f8"
 
+"""初始化Es对象和comm对象
+Tool使用的对象无法传参，必须是全局变量。"""
 es = Elastic(els_url, els_key)
+
+PC_IP = "192.168.43.60"
+PC_PORT = 5555
+# comm = PCCommunication()
+# comm.start_listening(PC_IP, PC_PORT)
 
 
 class Tools:
@@ -58,11 +67,21 @@ class Tools:
         else:
             return False
 
+    # 在console和人文字对话的函数
     @tool
     def ask_human(question: str):
         """ask patients for the information they need to help you diagnose"""
         answer = input(question)
         return answer
+
+    # 和Nao对话的ask human函数
+    # @tool
+    # def ask_human(question: str):
+    #     """ask patients for the information they need to help you diagnose"""
+    #     # 发送控制信号
+    #     comm.send_ctrl_sign(question, False, "")
+    #     answer = comm.recv_audio_to_text()
+    #     return answer
 
 
 class ChatBot:
@@ -98,7 +117,7 @@ class ChatBot:
             prompt=PromptTemplate.from_template(
                 self.prompts["other_prompt"] + self.prompts["react_base_prompt"]
             ),
-            tools=[DuckDuckGoSearchResults()],
+            tools=[DuckDuckGoSearchResults(),self.tools.ask_human],
         )
         # 构建chain
         self.bye_chain = self._standard_str_chain_init("bye_prompt")
@@ -131,13 +150,13 @@ class ChatBot:
         prompt = PromptTemplate.from_template(self.prompts[prompt_index])
         return prompt | self.llm | StrOutputParser()
 
-    def _contextualize_q_chain_init(self):
-        # 构建上下文联系chain
-        # 联系上下文，重写用户问题，包含上下文信息。提升LLM召回能力，（避免因长上下文导致的LLM召回能力下降，无法正确结合上下文理解用户问题）
-        contextualize_q_prompt = PromptTemplate.from_template(
-            self.prompts["contextualize_q_system_prompt"]
-        )
-        return contextualize_q_prompt | self.llm | StrOutputParser()
+    # def _contextualize_q_chain_init(self):
+    #     # 构建上下文联系chain
+    #     # 联系上下文，重写用户问题，包含上下文信息。提升LLM召回能力，（避免因长上下文导致的LLM召回能力下降，无法正确结合上下文理解用户问题）
+    #     contextualize_q_prompt = PromptTemplate.from_template(
+    #         self.prompts["contextualize_q_system_prompt"]
+    #     )
+    # return contextualize_q_prompt | self.llm | StrOutputParser()
 
     def _rag_chain_init(self):
         # 构建rag chain，根据输入的问题。构建找到说明书，构建vector，然后进行rag回答用户问题。
@@ -163,7 +182,7 @@ class ChatBot:
                 # 1. 搜索药物对应的说明书；2. 按照chunk_size，切分为文本块；3.通过embedding模型，构建vectorstore对象。4. 返回retriever对象。
                 print(medication_name)
                 manual = self.tools.search_manual(medication_name)
-                print(manual)
+                # print(manual)
                 if (
                     manual
                 ):  # 是否有搜索结果，有，做retriever，无，则返回string信息告诉LLM。
@@ -190,12 +209,12 @@ class ChatBot:
             | StrOutputParser()
         )
 
-    def _router_chain_init(self):
-        return (
-            PromptTemplate.from_template(self.prompts["router_prompt"])
-            | self.llm
-            | StrOutputParser()
-        )
+    # def _router_chain_init(self):
+    #     return (
+    #         PromptTemplate.from_template(self.prompts["router_prompt"])
+    #         | self.llm
+    #         | StrOutputParser()
+    #     )
 
     def _init_full_chain(self):
         def contextualized_question(input: dict):
@@ -274,12 +293,15 @@ class ChatBot:
 
     def chat(self, input_str):
         """根据用户问题，经过fullchaiin，返回一个答案，并保存memory"""
+        """参数：input_str:输入问题的字符串。
+        返回值：output，chain的输出结果：str"""
+        # 初始化End_chat为False，这样是一个全局的状态改变，Chat_with_nao也可以接收到。
+        self.end_chat = False
         input_dict = {"input": input_str}
         response = self.full_chain.invoke(input_dict)
         output = response if isinstance(response, str) else response["output"]
         if self.end_chat:
             self.memory.clear()
-            self.end_chat = False
         else:  # 否则保存历史对话。
             self.memory.save_context(
                 input_dict,
@@ -287,6 +309,14 @@ class ChatBot:
             )
         # 返回回答结果。
         return output
+
+    def chat_with_nao(self):
+        while True:
+            print("等待输入")
+            input_str=comm.recv_audio_to_text()
+            print("接受到输入")
+            output = self.chat(input_str)
+            comm.send_ctrl_sign(output,end_chat=self.end_chat,action="")
 
 
 chat = ChatBot(debug=True)
