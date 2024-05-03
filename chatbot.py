@@ -31,7 +31,7 @@ os.environ["DASHSCOPE_API_KEY"] = "sk-a34e3a056413489f8e3300bef0a1a6f8"
 Tool使用的对象无法传参，必须是全局变量。"""
 es = Elastic(els_url, els_key)
 
-PC_IP = "192.168.43.60"
+PC_IP = "192.168.43.156"
 PC_PORT = 5555
 comm = PCCommunication()
 comm.start_listening(PC_IP, PC_PORT)

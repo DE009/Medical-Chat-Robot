@@ -22,7 +22,8 @@ class PCCommunication(Communication):
     def recv_audio_to_text(self):
         # 接受audio，直接转换为text返回。
         audio = self._recv_bytes()
-        print(audio)
+        # print(audio)
+        print("收到音频")
         print("进入ASR")
         text = self.asr.audio_to_text(audio)
         return text

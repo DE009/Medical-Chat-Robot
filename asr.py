@@ -4,7 +4,7 @@ import nls
 
 
 URL = "wss://nls-gateway-cn-shanghai.aliyuncs.com/ws/v1"
-TOKEN = "b6687ff0fc824f1ba33081f919e69ba0"  # 参考https://help.aliyun.com/document_detail/450255.html获取token
+TOKEN = "a5aae5ddb27c476e9c2e91f484dffa35"  # 参考https://help.aliyun.com/document_detail/450255.html获取token
 APPKEY = "wqgataB0hKgwl4V8"  # 获取Appkey请前往控制台：https://nls-portal.console.aliyun.com/applist
 
 
