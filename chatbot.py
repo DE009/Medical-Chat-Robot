@@ -31,10 +31,10 @@ os.environ["DASHSCOPE_API_KEY"] = "sk-a34e3a056413489f8e3300bef0a1a6f8"
 Tool使用的对象无法传参，必须是全局变量。"""
 es = Elastic(els_url, els_key)
 
-PC_IP = "192.168.43.156"
-PC_PORT = 5555
-comm = PCCommunication()
-comm.start_listening(PC_IP, PC_PORT)
+# PC_IP = "192.168.43.156"
+# PC_PORT = 5555
+# comm = PCCommunication()
+# comm.start_listening(PC_IP, PC_PORT)
 
 
 class Tools:
@@ -68,20 +68,20 @@ class Tools:
             return False
 
     # 在console和人文字对话的函数
-    # @tool
-    # def ask_human(question: str):
-    #     """ask patients for the information they need to help you diagnose"""
-    #     answer = input(question)
-    #     return answer
-
-    # 和Nao对话的ask human函数
     @tool
     def ask_human(question: str):
         """ask patients for the information they need to help you diagnose"""
-        # 发送控制信号
-        comm.send_ctrl_sign(question, False, "")
-        answer = comm.recv_audio_to_text()
+        answer = input(question)
         return answer
+
+    # 和Nao对话的ask human函数
+    # @tool
+    # def ask_human(question: str):
+    #     """ask patients for the information they need to help you diagnose"""
+    #     # 发送控制信号
+    #     comm.send_ctrl_sign(question, False, "")
+    #     answer = comm.recv_audio_to_text()
+    #     return answer
 
 
 class ChatBot:
@@ -117,7 +117,7 @@ class ChatBot:
             prompt=PromptTemplate.from_template(
                 self.prompts["other_prompt"] + self.prompts["react_base_prompt"]
             ),
-            tools=[DuckDuckGoSearchResults(),self.tools.ask_human],
+            tools=[DuckDuckGoSearchResults(), self.tools.ask_human],
         )
         # 构建chain
         self.bye_chain = self._standard_str_chain_init("bye_prompt")
@@ -310,13 +310,20 @@ class ChatBot:
         # 返回回答结果。
         return output
 
-    def chat_with_nao(self):
+    # def chat_with_nao(self):
+    #     while True:
+    #         print("等待输入")
+    #         input_str=comm.recv_audio_to_text()
+    #         print("接受到输入")
+    #         output = self.chat(input_str)
+    # comm.send_ctrl_sign(output,end_chat=self.end_chat,action="")
+    def chat_in_terminal(self):
         while True:
             print("等待输入")
-            input_str=comm.recv_audio_to_text()
+            input_str = input("输入你的问题：")
             print("接受到输入")
             output = self.chat(input_str)
-            comm.send_ctrl_sign(output,end_chat=self.end_chat,action="")
+            print(output)
 
 
 # chat = ChatBot(debug=True)
